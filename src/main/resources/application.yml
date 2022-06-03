@@ -1,10 +1,18 @@
+spring.application.name: betterreads
+
+datadump.location:
+    author: /Users/nazwa/Desktop/test-authors.txt
+    works: /Users/nazwa/Desktop/test-works.txt
+
 spring:
+    main:
+        allow-circular-references: true
     data:
         cassandra:
             keyspace-name: main
-            username: <username> 
-            password: <secret> 
-            schema-action: create-if-not-exists
+            username: <username>
+            password: <password>
+            schema-action: recreate
             request:
                 timeout: 10s
             connection:
@@ -16,7 +24,7 @@ datastax.astra:
 
 
 astra.db:
-    id: <db-id> 
+    id: <id>
     region: europe-west1
     keyspace: main
     application.token: <token> 
