@@ -5,15 +5,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import javax.annotation.PostConstruct;
 
 import com.poe.betterreads.book.Book;
 import com.poe.betterreads.author.Author;
 import com.poe.betterreads.author.AuthorRepository;
+import com.poe.betterreads.book.BookRepository;
 import com.poe.betterreads.connection.DataStaxAstraProperties;
 
 import org.json.JSONArray;
@@ -27,12 +29,17 @@ import org.springframework.boot.autoconfigure.cassandra.CqlSessionBuilderCustomi
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
+import javax.annotation.PostConstruct;
+
 @SpringBootApplication
 @EnableConfigurationProperties(DataStaxAstraProperties.class)
 public class BetterreadsApplication {
 
 	@Autowired
 	AuthorRepository authorRepository;
+
+	@Autowired
+	BookRepository bookRepository;
 
 	@Value("${datadump.location.author}")
 	private String authorDumpLocation;
@@ -60,10 +67,11 @@ public class BetterreadsApplication {
 				author.setName(jsonObject.optString("name"));
 				author.setPersonalName(jsonObject.optString("personal_name"));
 				author.setId(jsonObject.optString("key").replace("/authors/", ""));
-				
+
 				// Persist using Repository
 				System.out.println("Saving author " + author.getName() + "...");
 				authorRepository.save(author);
+
 				} catch (JSONException e) {
 					e.printStackTrace();
 				}
@@ -76,6 +84,7 @@ public class BetterreadsApplication {
 
 	private void initWorks() {
 		Path path = Paths.get(worksDumpLocation);
+		DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS");
 		
 		try (Stream<String> lines = Files.lines(path)) {
 			lines.forEach(line -> {
@@ -88,7 +97,7 @@ public class BetterreadsApplication {
 				// Construct Book object
 				Book book = new Book();
 
-				book.setId(id);
+				book.setId(jsonObject.getString("key").replace("/works/", ""));
 
 				book.setName(jsonObject.optString("title"));
 
@@ -100,7 +109,7 @@ public class BetterreadsApplication {
 				JSONObject publishedObj = jsonObject.optJSONObject("created");
 				if(publishedObj != null) {
 					String dateStr = publishedObj.getString("value");
-					book.setPublishedDate(LocalDate.parse(dateStr));
+					book.setPublishedDate(LocalDate.parse(dateStr, dateFormatter));
 				}
 
 				JSONArray coversJSONArr = jsonObject.optJSONArray("covers");
@@ -121,21 +130,28 @@ public class BetterreadsApplication {
 						authorIds.add(authorId);
 					}
 					book.setAuthorIds(authorIds);
-					authorIds.stream().map(id -> authorRepository.findById(id))
+					List<String> authorNames = authorIds.stream().map(id -> authorRepository.findById(id))
 					.map(optionalAuthor -> {
-						if(!optionalAuthor.isPresent())
-						return "Unknown author";
-					});
+						if(!optionalAuthor.isPresent()) return "Unknown author";
 
+						return optionalAuthor.get().getName();
+
+					}).collect(Collectors.toList());
+
+					book.setAuthorNames(authorNames);
 				}
+					// Persist using Repository
+					System.out.println("Saving book " + book.getName() + "...");
+					bookRepository.save(book);
 
-
-				book.setAuthorNames(authorNames);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			});
 
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-				}
 	}
 
 	@PostConstruct
